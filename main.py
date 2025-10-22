@@ -486,8 +486,6 @@ def create_forecast_gif(output_dir=None):
        filepath = os.path.join(output_dir, filename)
        images.append(imageio.imread(filepath))
 
-# TAMBAHKAN PRINT INI UNTUK TES
-   print("--- MEMBUAT GIF DENGAN DURASI 3.0 DETIK ---")
    
    # Buat GIF
    gif_filename = os.path.join(output_dir, f"CB_FORECAST_ANIMATION_{datetime.now().strftime('%d%m%Y')}.gif")
