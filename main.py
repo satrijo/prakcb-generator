@@ -599,7 +599,7 @@ def generate_output_json(forecasts, output_dir=None):
    # Tulis file ke direktori tanggal (sama dengan lokasi JPG/TXT)
    if not os.path.exists(output_dir):
        os.makedirs(output_dir)
-   outfile = os.path.join(output_dir, f"prakiraancb_{datetime.now().strftime('%Y%m%d%H%M%S')}.json")
+   outfile = os.path.join(output_dir, f"prakiraancb_{datetime.now().strftime('%Y%m%d')}.json")
    with open(outfile, 'w', encoding='utf-8') as f:
        json.dump(payload, f, ensure_ascii=False, indent=1)
 
