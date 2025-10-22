@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from tqdm import tqdm
 import matplotlib.font_manager as fm
 import os
-import imageio
+import imageio.v2 as imageio
 import json
 import re
 import requests
@@ -485,10 +485,13 @@ def create_forecast_gif(output_dir=None):
    for filename in plot_files:
        filepath = os.path.join(output_dir, filename)
        images.append(imageio.imread(filepath))
+
+# TAMBAHKAN PRINT INI UNTUK TES
+   print("--- MEMBUAT GIF DENGAN DURASI 3.0 DETIK ---")
    
    # Buat GIF
    gif_filename = os.path.join(output_dir, f"CB_FORECAST_ANIMATION_{datetime.now().strftime('%d%m%Y')}.gif")
-   imageio.mimsave(gif_filename, images, duration=0.1, loop=0)  # 1.5 detik per frame, loop infinitely
+   imageio.mimsave(gif_filename, images, fps=(1/3), loop=0)  # 3 detik per frame, loop infinitely
    
    print(f"Animasi forecast disimpan di: {gif_filename}")
    return gif_filename
