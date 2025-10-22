@@ -535,7 +535,7 @@ def generate_output_json(forecasts, output_dir=None):
    from_id = format_tanggal_id(first_dt)
    to_id = format_tanggal_id(last_dt)
 
-   title = f"POTENSI PERTUMBUHAN AWAN CB DI WILAYAH UDARA INDONESIA BERLAKU {from_id}.upper() - {to_id}.upper()"
+   title = f"POTENSI PERTUMBUHAN AWAN CB DI WILAYAH UDARA INDONESIA BERLAKU {from_id.upper()} - {to_id.upper()}"
    slug = f"{slugify(title)}-{int(datetime.now().timestamp())}"
 
    # Kumpulan gabungan untuk cover
@@ -599,7 +599,7 @@ def generate_output_json(forecasts, output_dir=None):
    # Tulis file ke direktori tanggal (sama dengan lokasi JPG/TXT)
    if not os.path.exists(output_dir):
        os.makedirs(output_dir)
-   outfile = os.path.join(output_dir, f"prakiraancb_{datetime.now().strftime('%Y%m%d')}.json")
+   outfile = os.path.join(output_dir, f"prakiraancb_{datetime.now().strftime('%d%m%Y')}.json")
    with open(outfile, 'w', encoding='utf-8') as f:
        json.dump(payload, f, ensure_ascii=False, indent=1)
 
