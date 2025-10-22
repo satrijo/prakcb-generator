@@ -26,6 +26,7 @@ import os
 import imageio
 import json
 import re
+import requests
 
 # Set font to Times New Roman
 plt.rcParams['font.family'] = 'Times New Roman'
@@ -487,7 +488,7 @@ def create_forecast_gif(output_dir=None):
    
    # Buat GIF
    gif_filename = os.path.join(output_dir, f"CB_FORECAST_ANIMATION_{datetime.now().strftime('%d%m%Y')}.gif")
-   imageio.mimsave(gif_filename, images, duration=7, loop=0)  # 7 detik per frame, loop infinitely
+   imageio.mimsave(gif_filename, images, duration=2, loop=0)  # 2 detik per frame, loop infinitely
    
    print(f"Animasi forecast disimpan di: {gif_filename}")
    return gif_filename
@@ -605,6 +606,20 @@ def generate_output_json(forecasts, output_dir=None):
 
    return outfile
 
+def ping_callback():
+   """
+   Mengirim ping ke callback URL setelah semua task selesai
+   """
+   callback_url = "https://web-aviation.bmkg.go.id/web/predcb/callback"
+   try:
+       response = requests.post(callback_url, timeout=10)
+       if response.status_code == 200:
+           print(f"Callback ping berhasil: {response.status_code}")
+       else:
+           print(f"Callback ping gagal: {response.status_code}")
+   except requests.exceptions.RequestException as e:
+       print(f"Error mengirim callback ping: {str(e)}")
+
 def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces, shp_sea):
    """
    Modifikasi fungsi existing untuk menggunakan direktori tanggal
@@ -673,6 +688,9 @@ def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces
    # Buat file JSON hasil yang mengikuti struktur assets/dummy.json
    json_path = generate_output_json(forecasts, output_dir)
    print(f"File JSON disimpan di: {json_path}")
+   
+   # Kirim callback ping setelah semua task selesai
+   ping_callback()
    
    return forecasts
 
