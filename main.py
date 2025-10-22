@@ -24,6 +24,8 @@ from tqdm import tqdm
 import matplotlib.font_manager as fm
 import os
 import imageio
+import json
+import re
 
 # Set font to Times New Roman
 plt.rcParams['font.family'] = 'Times New Roman'
@@ -490,6 +492,118 @@ def create_forecast_gif(output_dir=None):
    print(f"Animasi forecast disimpan di: {gif_filename}")
    return gif_filename
 
+def generate_output_json(forecasts, output_dir=None):
+   """
+   Membuat file JSON dengan struktur seperti assets/dummy.json
+   - Field utama: title, slug, from, to, content (JSON string), created_at, updated_at
+   - content berisi per-hari (H+1..H+7) dan cover (gabungan)
+   """
+   if output_dir is None:
+       output_dir = create_date_directory()
+
+   # Pemetaan bulan dalam Bahasa Indonesia
+   bulan_id = {
+       1: ('Januari', 'JANUARI'), 2: ('Februari', 'FEBRUARI'), 3: ('Maret', 'MARET'),
+       4: ('April', 'APRIL'), 5: ('Mei', 'MEI'), 6: ('Juni', 'JUNI'),
+       7: ('Juli', 'JULI'), 8: ('Agustus', 'AGUSTUS'), 9: ('September', 'SEPTEMBER'),
+       10: ('Oktober', 'OKTOBER'), 11: ('November', 'NOVEMBER'), 12: ('Desember', 'DESEMBER')
+   }
+
+   def format_tanggal_id(dt):
+       nama_bulan, _ = bulan_id[dt.month]
+       return f"{dt.day} {nama_bulan} {dt.year}"
+
+   def format_key_harian(dt):
+       _, nama_bulan_caps = bulan_id[dt.month]
+       return f"{dt.day}_{nama_bulan_caps}_{dt.year}"
+
+   def slugify(text):
+       text = text.lower()
+       text = re.sub(r"[^a-z0-9\s-]", "", text)
+       text = re.sub(r"\s+", "-", text).strip('-')
+       return text
+
+   if not forecasts:
+       raise ValueError("Daftar forecasts kosong; tidak bisa membuat JSON.")
+
+   # Susun rentang tanggal
+   first_dt = forecasts[0]['valid_time']
+   last_dt = forecasts[-1]['valid_time']
+   from_iso = first_dt.strftime('%Y-%m-%d')
+   to_iso = last_dt.strftime('%Y-%m-%d')
+
+   from_id = format_tanggal_id(first_dt)
+   to_id = format_tanggal_id(last_dt)
+
+   title = f"POTENSI PERTUMBUHAN AWAN CB DI WILAYAH UDARA INDONESIA BERLAKU {from_id} - {to_id}"
+   slug = f"{slugify(title)}-{int(datetime.now().timestamp())}"
+
+   # Kumpulan gabungan untuk cover
+   cover_ocnl_set = set()
+   cover_frq_set = set()
+
+   # Bangun entri per hari
+   per_hari = {}
+   for forecast in forecasts:
+       valid_dt = forecast['valid_time']
+       key = format_key_harian(valid_dt)
+       date_text = format_tanggal_id(valid_dt)
+
+       # Klasifikasi per hari
+       classification = forecast['classification']
+       ocnl_list = classification.get('OCNL', {}).get('Provinsi', []) + classification.get('OCNL', {}).get('Laut', [])
+       frq_list = classification.get('FRQ', {}).get('Provinsi', []) + classification.get('FRQ', {}).get('Laut', [])
+
+       # Tambahkan ke cover set
+       cover_ocnl_set.update(ocnl_list)
+       cover_frq_set.update(frq_list)
+
+       # Tentukan nama file gambar sesuai yang dihasilkan save_results
+       stamp = valid_dt.strftime('%d%m%Y')
+       image_filename = f"CB_PRED_{stamp}_H{forecast['day']}.jpg"
+       image_path = os.path.join(output_dir, image_filename)
+
+       per_hari[key] = {
+           "title": f"POTENSI PERTUMBUHAN AWAN CB DI WILAYAH UDARA INDONESIA BERLAKU {date_text}",
+           "date": date_text,
+           "image": image_path,
+           "ocnl": ", ".join(ocnl_list) if ocnl_list else "-",
+           "frq": ", ".join(frq_list) if frq_list else "-"
+       }
+
+   # GIF cover
+   gif_filename = f"CB_FORECAST_ANIMATION_{datetime.now().strftime('%d%m%Y')}.gif"
+   gif_path = os.path.join(output_dir, gif_filename)
+
+   content_obj = per_hari.copy()
+   content_obj["cover"] = {
+       "title": title,
+       "date": f"{from_id} - {to_id}",
+       "image": gif_path,
+       "ocnl": ", ".join(sorted(cover_ocnl_set)) if cover_ocnl_set else "-",
+       "frq": ", ".join(sorted(cover_frq_set)) if cover_frq_set else "-"
+   }
+
+   # Bungkus sesuai struktur dummy.json
+   payload = {
+       "title": title,
+       "slug": slug,
+       "from": from_iso,
+       "to": to_iso,
+       "content": json.dumps(content_obj, ensure_ascii=False),
+       "created_at": datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+       "updated_at": datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+   }
+
+   # Tulis file ke direktori tanggal (sama dengan lokasi JPG/TXT)
+   if not os.path.exists(output_dir):
+       os.makedirs(output_dir)
+   outfile = os.path.join(output_dir, f"prakiraancb_{datetime.now().strftime('%Y%m%d%H%M%S')}.json")
+   with open(outfile, 'w', encoding='utf-8') as f:
+       json.dump(payload, f, ensure_ascii=False, indent=1)
+
+   return outfile
+
 def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces, shp_sea):
    """
    Modifikasi fungsi existing untuk menggunakan direktori tanggal
@@ -502,13 +616,13 @@ def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces
        ds = xr.open_dataset(url)
        ds = ds.sel(lon=slice(90, 145), lat=slice(-15, 10))
        
-       # Hitung start_time untuk setiap periode prediksi
-       model_time = pd.to_datetime(ds.time.values[0])
+       # Hitung start_time valid berbasis init date/hour dan timesteps (bukan dari ds.time)
+       init_datetime_utc = datetime.strptime(f"{date}{hour}", "%Y%m%d%H")
        start_times = []
        for day in range(1, forecast_days + 1):
            forecast_key = f'H+{day}'
            start_step = timesteps[forecast_key]['start']
-           start_time = model_time + timedelta(hours=start_step * 3)
+           start_time = init_datetime_utc + timedelta(hours=start_step * 3)
            start_times.append(start_time)
        
        print(f"\nMembuat forecast dari data GFS tanggal {date} jam {hour}Z")
@@ -554,6 +668,10 @@ def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces
    
    # Tambahkan animasi GIF
    create_forecast_gif(output_dir)
+   
+   # Buat file JSON hasil yang mengikuti struktur assets/dummy.json
+   json_path = generate_output_json(forecasts, output_dir)
+   print(f"File JSON disimpan di: {json_path}")
    
    return forecasts
 

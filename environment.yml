@@ -1,0 +1,16 @@
+name: geo_env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.14
+  - xarray
+  - matplotlib
+  - cartopy
+  - numpy
+  - pandas
+  - geopandas
+  - tqdm
+  - imageio
+  - netcdf4  # <-- Dependensi xarray
+  - pydap    # <-- Dependensi xarray
+  - ffmpeg   # <-- Dependensi imageio untuk membuat GIF/video

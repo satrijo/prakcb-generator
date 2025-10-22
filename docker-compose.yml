@@ -1,0 +1,16 @@
+services:
+  generator:
+    # Beri nama image yang akan di-build
+    image: prakcb-generator
+    
+    # Perintahkan Compose untuk build dari Dockerfile di direktori ini
+    build: .
+    
+    # Volume mapping (SANGAT PENTING)
+    volumes:
+      # Map folder ./output di komputer Anda ke /app/output di dalam container
+      - /home/rio/Project/Data:/app/CB
+      
+      # # (Opsional) Jika Anda punya data input (spt shapefiles)
+      # # Map folder ./data di komputer Anda ke /app/data di dalam container
+      # - ./data:/app/data
