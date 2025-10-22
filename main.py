@@ -487,7 +487,7 @@ def create_forecast_gif(output_dir=None):
    
    # Buat GIF
    gif_filename = os.path.join(output_dir, f"CB_FORECAST_ANIMATION_{datetime.now().strftime('%d%m%Y')}.gif")
-   imageio.mimsave(gif_filename, images, duration=7)  # 7 detik per frame
+   imageio.mimsave(gif_filename, images, duration=7, loop=0)  # 7 detik per frame, loop infinitely
    
    print(f"Animasi forecast disimpan di: {gif_filename}")
    return gif_filename
