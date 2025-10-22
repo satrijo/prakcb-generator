@@ -574,8 +574,8 @@ def generate_output_json(forecasts, output_dir=None):
 
    # GIF cover
    gif_filename = f"CB_FORECAST_ANIMATION_{datetime.now().strftime('%d%m%Y')}.gif"
-   gif_path = os.path.join(output_dir, gif_filename)
-
+#    gif_path = os.path.join(output_dir, gif_filename)
+   gif_path = f"https://web-aviation.bmkg.go.id/prakcb/{first_dt.strftime('%d%m%Y')}/{gif_filename}"
    content_obj = per_hari.copy()
    content_obj["cover"] = {
        "title": title,
