@@ -535,7 +535,7 @@ def generate_output_json(forecasts, output_dir=None):
    from_id = format_tanggal_id(first_dt)
    to_id = format_tanggal_id(last_dt)
 
-   title = f"POTENSI PERTUMBUHAN AWAN CB DI WILAYAH UDARA INDONESIA BERLAKU {from_id} - {to_id}"
+   title = f"POTENSI PERTUMBUHAN AWAN CB DI WILAYAH UDARA INDONESIA BERLAKU {from_id}.upper() - {to_id}.upper()"
    slug = f"{slugify(title)}-{int(datetime.now().timestamp())}"
 
    # Kumpulan gabungan untuk cover
@@ -561,8 +561,9 @@ def generate_output_json(forecasts, output_dir=None):
        # Tentukan nama file gambar sesuai yang dihasilkan save_results
        stamp = valid_dt.strftime('%d%m%Y')
        image_filename = f"CB_PRED_{stamp}_H{forecast['day']}.jpg"
-       image_path = os.path.join(output_dir, image_filename)
-
+    #    image_path = os.path.join(output_dir, image_filename)
+       #date format DDMMYYYY today
+       image_path = f"https://web-aviation.bmkg.go.id/prakcb/{first_dt.strftime('%d%m%Y')}/{image_filename}"
        per_hari[key] = {
            "title": f"POTENSI PERTUMBUHAN AWAN CB DI WILAYAH UDARA INDONESIA BERLAKU {date_text}",
            "date": date_text,
