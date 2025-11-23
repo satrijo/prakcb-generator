@@ -4,6 +4,11 @@
 # In[ ]:
 
 
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
 import matplotlib
 matplotlib.use('Agg')
 
@@ -34,12 +39,9 @@ try:
        fm.fontManager.addfont(font_path)
        custom_font_name = fm.FontProperties(fname=font_path).get_name()
        plt.rcParams['font.family'] = custom_font_name
-       print(f"INFO: Custom font loaded from {font_path}")
-except Exception as e:
+except Exception:
    # If loading custom font fails, keep default rcParams
-   print(f"INFO: Using system Times New Roman font (custom font failed: {str(e)})")
    pass
-
 def create_date_directory():
    """
    Membuat direktori berdasarkan tanggal hari ini
@@ -53,12 +55,10 @@ def create_date_directory():
    # Buat direktori base jika belum ada
    if not os.path.exists(base_dir):
        os.makedirs(base_dir)
-       print(f"INFO: Created base directory: {base_dir}")
    
    # Buat direktori tanggal jika belum ada
    if not os.path.exists(date_dir):
        os.makedirs(date_dir)
-       print(f"INFO: Created date directory: {date_dir}")
    
    return date_dir
 
@@ -124,14 +124,6 @@ def calculate_rain_by_region(ds, provinces, sea_areas, precip):
    Menghitung nilai hujan untuk setiap provinsi dan area laut menggunakan spatial indexing
    dan menyimpan informasi kode provinsi/ID laut untuk pengurutan
    """
-   print(f"\n{'='*60}")
-   print(f"DEBUG calculate_rain_by_region:")
-   print(f"{'='*60}")
-   print(f"  Input provinces: {len(provinces)}")
-   print(f"  Input sea_areas: {len(sea_areas)}")
-   print(f"  Precip shape: {precip.shape}")
-   print(f"  Precip min/max: {np.nanmin(precip):.2f}/{np.nanmax(precip):.2f} mm")
-   
    # Membuat grid points
    lon_grid, lat_grid = np.meshgrid(ds.lon, ds.lat)
    points_coords = list(zip(lon_grid.flatten(), lat_grid.flatten()))
@@ -143,12 +135,6 @@ def calculate_rain_by_region(ds, provinces, sea_areas, precip):
        'rain': precip.flatten()
    })
    
-   print(f"  Points dataframe: {len(points_df)} grid points")
-   print(f"  Rain values > 0: {(points_df.rain > 0).sum()}")
-   print(f"  Rain values > 10: {(points_df.rain > 10).sum()}")
-   print(f"  Rain values > 20: {(points_df.rain > 20).sum()}")
-   print(f"  Rain values > 50: {(points_df.rain > 50).sum()}")
-   
    # Buat GeoDataFrame dengan CRS WGS84
    points_gdf = gpd.GeoDataFrame(
        points_df,
@@ -156,11 +142,9 @@ def calculate_rain_by_region(ds, provinces, sea_areas, precip):
    )
    try:
        points_gdf.set_crs(epsg=4326, inplace=True, allow_override=True)
-       print(f"  Points CRS set to: EPSG:4326")
-   except Exception as e:
+   except Exception:
        # Fallback untuk versi GeoPandas lama
        points_gdf.crs = "EPSG:4326"
-       print(f"  Points CRS set to: EPSG:4326 (legacy method)")
    
    results = {
        'Provinsi': {},
@@ -174,111 +158,38 @@ def calculate_rain_by_region(ds, provinces, sea_areas, precip):
    }
    
    # Process provinces
-   print(f"\n{'='*60}")
    print("Memproses data provinsi...")
-   print(f"{'='*60}")
-   provinces_processed = 0
-   provinces_skipped = 0
-   provinces_with_rain = 0
-   
-   for idx, province in tqdm(provinces.iterrows(), total=len(provinces), desc="Processing Provinces"):
+   for _, province in tqdm(provinces.iterrows(), total=len(provinces)):
        # Lewati jika geometri tidak valid/None
-       if province.geometry is None:
-           provinces_skipped += 1
-           print(f"  SKIPPED (None geometry): Row {idx}")
+       if province.geometry is None or getattr(province.geometry, "is_empty", False):
            continue
-       
-       if getattr(province.geometry, "is_empty", False):
-           provinces_skipped += 1
-           print(f"  SKIPPED (Empty geometry): {province.get('PROVINSI', 'Unknown')} (Row {idx})")
-           continue
-       
-       provinces_processed += 1
-       
        # Filter points dalam provinsi
-       try:
-           mask = points_gdf.geometry.within(province.geometry)
-           valid_points = points_gdf[mask]
-           
-           if not valid_points.empty:
-               rain_values = valid_points.rain[~np.isnan(valid_points.rain) & (valid_points.rain >= 0)]
-               if len(rain_values) > 0:
-                   max_rain = rain_values.max()
-                   prov_name = province['PROVINSI']
-                   results['Provinsi'][prov_name] = max_rain
-                   
-                   # Simpan kode provinsi untuk pengurutan
-                   sorting_info['Provinsi'][prov_name] = province['KODE_PROV']
-                   provinces_with_rain += 1
-                   
-                   # Print detail untuk provinsi dengan hujan signifikan
-                   if max_rain >= 10:
-                       print(f"  ✓ {prov_name}: {max_rain:.2f} mm (dari {len(rain_values)} grid points)")
-       except Exception as e:
-           print(f"  ERROR processing {province.get('PROVINSI', 'Unknown')}: {str(e)}")
-           continue
-   
-   print(f"\n{'='*60}")
-   print(f"DEBUG Province Summary:")
-   print(f"{'='*60}")
-   print(f"  Total rows in shapefile: {len(provinces)}")
-   print(f"  Processed: {provinces_processed}")
-   print(f"  Skipped (invalid geom): {provinces_skipped}")
-   print(f"  With rain data: {provinces_with_rain}")
-   print(f"  Results stored: {len(results['Provinsi'])} provinces")
-   print(f"{'='*60}\n")
+       mask = points_gdf.geometry.within(province.geometry)
+       valid_points = points_gdf[mask]
+       
+       if not valid_points.empty:
+           rain_values = valid_points.rain[~np.isnan(valid_points.rain) & (valid_points.rain >= 0)]
+           if len(rain_values) > 0:
+               results['Provinsi'][province['PROVINSI']] = rain_values.max()
+               # Simpan kode provinsi untuk pengurutan
+               sorting_info['Provinsi'][province['PROVINSI']] = province['KODE_PROV']
    
    # Process sea areas
-   print(f"{'='*60}")
    print("Memproses data laut...")
-   print(f"{'='*60}")
-   seas_processed = 0
-   seas_skipped = 0
-   seas_with_rain = 0
-   
-   for idx, sea in tqdm(sea_areas.iterrows(), total=len(sea_areas), desc="Processing Sea Areas"):
+   for _, sea in tqdm(sea_areas.iterrows(), total=len(sea_areas)):
        # Lewati jika geometri tidak valid/None
-       if sea.geometry is None:
-           seas_skipped += 1
+       if sea.geometry is None or getattr(sea.geometry, "is_empty", False):
            continue
-       
-       if getattr(sea.geometry, "is_empty", False):
-           seas_skipped += 1
-           continue
-       
-       seas_processed += 1
-       
        # Filter points dalam area laut
-       try:
-           mask = points_gdf.geometry.within(sea.geometry)
-           valid_points = points_gdf[mask]
-           
-           if not valid_points.empty:
-               rain_values = valid_points.rain[~np.isnan(valid_points.rain) & (valid_points.rain >= 0)]
-               if len(rain_values) > 0:
-                   max_rain = rain_values.max()
-                   sea_name = sea['Met_Area']
-                   results['Laut'][sea_name] = max_rain
-                   
-                   # Simpan ID laut untuk pengurutan
-                   sorting_info['Laut'][sea_name] = sea['ID']
-                   seas_with_rain += 1
-                   
-                   if max_rain >= 10:
-                       print(f"  ✓ {sea_name}: {max_rain:.2f} mm")
-       except Exception as e:
-           print(f"  ERROR processing {sea.get('Met_Area', 'Unknown')}: {str(e)}")
-           continue
-   
-   print(f"\n{'='*60}")
-   print(f"DEBUG Sea Summary:")
-   print(f"{'='*60}")
-   print(f"  Total rows: {len(sea_areas)}")
-   print(f"  Processed: {seas_processed}")
-   print(f"  Skipped: {seas_skipped}")
-   print(f"  With rain data: {seas_with_rain}")
-   print(f"  Results stored: {len(results['Laut'])} sea areas")
-   print(f"{'='*60}\n")
+       mask = points_gdf.geometry.within(sea.geometry)
+       valid_points = points_gdf[mask]
+       
+       if not valid_points.empty:
+           rain_values = valid_points.rain[~np.isnan(valid_points.rain) & (valid_points.rain >= 0)]
+           if len(rain_values) > 0:
+               results['Laut'][sea['Met_Area']] = rain_values.max()
+               # Simpan ID laut untuk pengurutan
+               sorting_info['Laut'][sea['Met_Area']] = sea['ID']
    
    return results, sorting_info
 
@@ -286,10 +197,6 @@ def classify_regions(results, sorting_info):
    """
    Mengklasifikasikan wilayah berdasarkan nilai hujan
    """
-   print(f"\n{'='*60}")
-   print("Klasifikasi Wilayah:")
-   print(f"{'='*60}")
-   
    classification = {
        'ISOL': {'Provinsi': [], 'Laut': []},
        'OCNL': {'Provinsi': [], 'Laut': []},
@@ -328,12 +235,6 @@ def classify_regions(results, sorting_info):
            key=lambda x: sorting_info['Laut'].get(x, 999)  # 999 sebagai nilai default jika tidak ditemukan
        )
    
-   # Print summary
-   print(f"  ISOL: {len(classification['ISOL']['Provinsi'])} provinsi, {len(classification['ISOL']['Laut'])} laut")
-   print(f"  OCNL: {len(classification['OCNL']['Provinsi'])} provinsi, {len(classification['OCNL']['Laut'])} laut")
-   print(f"  FRQ: {len(classification['FRQ']['Provinsi'])} provinsi, {len(classification['FRQ']['Laut'])} laut")
-   print(f"{'='*60}\n")
-   
    return classification
 
 def save_results(fig, classification, date, hour, forecast_day, start_time):
@@ -349,7 +250,7 @@ def save_results(fig, classification, date, hour, forecast_day, start_time):
    # Simpan plot
    plot_filename = f"{output_dir}/CB_PRED_{timestamp}_H{forecast_day}.jpg"
    fig.savefig(plot_filename, dpi=300, bbox_inches='tight')
-   print(f"✓ Plot saved as: {plot_filename}")
+   print(f"Plot saved as: {plot_filename}")
    
    # Simpan klasifikasi
    txt_filename = f"{output_dir}/CB_CLASS_{timestamp}_H{forecast_day}.txt"
@@ -365,91 +266,36 @@ def save_results(fig, classification, date, hour, forecast_day, start_time):
            if areas['Laut']:
                f.write("Laut: " + ", ".join(areas['Laut']) + "\n")
    
-   print(f"✓ Classification saved as: {txt_filename}")
+   print(f"Classification saved as: {txt_filename}")
 
 def create_accumulated_rain_plot_with_provinces_and_sea(ds, shp_provinces, shp_sea, forecast_day, timesteps, start_time=None):
    """
    Membuat plot hujan akumulasi untuk periode tertentu dengan kriteria dan legenda yang diperbarui
    """
-   print(f"\n{'='*60}")
-   print(f"Creating Plot for Forecast Day H+{forecast_day}")
-   print(f"{'='*60}")
-   
    fig = plt.figure(figsize=(15, 10))
    
    main_ax = plt.axes(projection=ccrs.PlateCarree())
    
    provinces = gpd.read_file(shp_provinces)
    sea_areas = gpd.read_file(shp_sea)
-   
-   # DEBUG: Print info awal
-   print(f"Shapefile Loading:")
-   print(f"  Loaded {len(provinces)} provinces from {shp_provinces}")
-   print(f"  Loaded {len(sea_areas)} sea areas from {shp_sea}")
-   print(f"  Provinces CRS: {provinces.crs}")
-   print(f"  Sea Areas CRS: {sea_areas.crs}")
-   print(f"  Province columns: {provinces.columns.tolist()}")
 
-   # IMPROVED CRS HANDLING - Tidak suppress error
-   print(f"\nCRS Transformation:")
+   # Pastikan CRS konsisten (EPSG:4326) dan geometri valid
    try:
-       if provinces.crs is None:
-           print(f"  WARNING: Provinces have no CRS, setting to EPSG:4326")
-           provinces.set_crs(epsg=4326, inplace=True)
-       elif provinces.crs.to_string().upper() not in ["EPSG:4326", "WGS84", "OGC:CRS84"]:
-           old_crs = provinces.crs
+       if provinces.crs and provinces.crs.to_string().upper() not in ["EPSG:4326", "WGS84", "OGC:CRS84"]:
            provinces = provinces.to_crs(epsg=4326)
-           print(f"  ✓ Provinces converted from {old_crs} to EPSG:4326")
-       else:
-           print(f"  ✓ Provinces already in WGS84")
-   except Exception as e:
-       print(f"  ERROR: Provinces CRS transform failed: {str(e)}")
-       raise  # Don't suppress the error
-   
+   except Exception:
+       pass
    try:
-       if sea_areas.crs is None:
-           print(f"  WARNING: Sea areas have no CRS, setting to EPSG:4326")
-           sea_areas.set_crs(epsg=4326, inplace=True)
-       elif sea_areas.crs.to_string().upper() not in ["EPSG:4326", "WGS84", "OGC:CRS84"]:
-           old_crs = sea_areas.crs
+       if sea_areas.crs and sea_areas.crs.to_string().upper() not in ["EPSG:4326", "WGS84", "OGC:CRS84"]:
            sea_areas = sea_areas.to_crs(epsg=4326)
-           print(f"  ✓ Sea areas converted from {old_crs} to EPSG:4326")
-       else:
-           print(f"  ✓ Sea areas already in WGS84")
-   except Exception as e:
-       print(f"  ERROR: Sea areas CRS transform failed: {str(e)}")
-       raise
+   except Exception:
+       pass
 
-   # IMPROVED GEOMETRY FILTERING - Lebih permisif, hanya buang yang benar-benar None
-   print(f"\nGeometry Validation:")
-   print(f"  Before filtering - Provinces: {len(provinces)}, Sea: {len(sea_areas)}")
-   
-   # Hanya buang yang None
-   provinces_before = len(provinces)
+   # Buang geometri None/empty/invalid
    provinces = provinces[provinces.geometry.notnull()]
-   provinces_dropped_null = provinces_before - len(provinces)
-   print(f"  After notnull filter - Provinces: {len(provinces)} (dropped {provinces_dropped_null} null geometries)")
-   
-   sea_before = len(sea_areas)
    sea_areas = sea_areas[sea_areas.geometry.notnull()]
-   sea_dropped_null = sea_before - len(sea_areas)
-   print(f"  After notnull filter - Sea: {len(sea_areas)} (dropped {sea_dropped_null} null geometries)")
-   
-   # OPTIONAL: Uncomment jika ingin buang empty geometries juga
-   # provinces_before = len(provinces)
-   # provinces = provinces[~provinces.geometry.is_empty]
-   # print(f"  After is_empty filter - Provinces: {len(provinces)} (dropped {provinces_before - len(provinces)} empty geometries)")
-   
-   # sea_before = len(sea_areas)
-   # sea_areas = sea_areas[~sea_areas.geometry.is_empty]
-   # print(f"  After is_empty filter - Sea: {len(sea_areas)} (dropped {sea_before - len(sea_areas)} empty geometries)")
-   
-   print(f"  Final - Provinces: {len(provinces)}, Sea: {len(sea_areas)}")
-   
-   if len(provinces) == 0:
-       print(f"  WARNING: No valid provinces after filtering!")
-   if len(sea_areas) == 0:
-       print(f"  WARNING: No valid sea areas after filtering!")
+   provinces = provinces[~provinces.geometry.is_empty]
+   sea_areas = sea_areas[~sea_areas.geometry.is_empty]
    
    main_ax.set_extent([90, 145, -15, 10], crs=ccrs.PlateCarree())
    main_ax.add_feature(cfeature.COASTLINE.with_scale('10m'), linewidth=1.2)
@@ -459,19 +305,14 @@ def create_accumulated_rain_plot_with_provinces_and_sea(ds, shp_provinces, shp_s
    start_step = timesteps[forecast_key]['start']
    end_step = timesteps[forecast_key]['end']
    
-   print(f"\nPrecipitation Calculation:")
-   print(f"  Forecast period: {forecast_key} (timesteps {start_step} to {end_step})")
-   
    # Hitung presipitasi
    precip = ds['cpratsfc'].isel(time=slice(start_step, end_step)).sum(dim='time').values*3600*3
-   print(f"  Accumulated precip calculated: min={np.nanmin(precip):.2f}, max={np.nanmax(precip):.2f} mm")
    
    # Hitung waktu valid jika tidak disediakan
    if start_time is None:
        model_time = pd.to_datetime(ds.time.values[0])
        start_time = model_time + timedelta(hours=start_step * 3)
    end_time = start_time + timedelta(hours=24)
-   print(f"  Valid time: {start_time.strftime('%Y-%m-%d %H:%M')} UTC")
    
    results, sorting_info = calculate_rain_by_region(ds, provinces, sea_areas, precip)
    classification = classify_regions(results, sorting_info)
@@ -480,23 +321,14 @@ def create_accumulated_rain_plot_with_provinces_and_sea(ds, shp_provinces, shp_s
    levels = [0, 10, 20.1, 50, 300]
    colors = ['#FFFFFF', '#87CEFA', '#000080', '#00FF00']
    
-   print(f"\nPlotting:")
    cs = main_ax.contourf(ds.lon, ds.lat, precip, levels=levels, 
                         colors=colors, extend='max',
                         transform=ccrs.PlateCarree())
-   print(f"  ✓ Contour plot created")
    
    if len(provinces) > 0:
        provinces.plot(ax=main_ax, facecolor='none', edgecolor='black', linewidth=0.8)
-       print(f"  ✓ Province boundaries plotted ({len(provinces)} provinces)")
-   else:
-       print(f"  WARNING: No provinces to plot!")
-       
    if len(sea_areas) > 0:
        sea_areas.plot(ax=main_ax, facecolor='none', edgecolor='blue', linewidth=0.8, alpha=0)
-       print(f"  ✓ Sea area boundaries plotted ({len(sea_areas)} areas)")
-   else:
-       print(f"  WARNING: No sea areas to plot!")
    
    # Add gridlines
    gl = main_ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5,
@@ -531,14 +363,9 @@ def create_accumulated_rain_plot_with_provinces_and_sea(ds, shp_provinces, shp_s
    
    # Add logo
    logo_ax = box_ax.inset_axes([-0.15, 0.4, 0.5, 0.5])
-   logo_path = current_dir + '/assets/BMKG.png'
-   if os.path.exists(logo_path):
-       logo = plt.imread(logo_path)
-       logo_ax.imshow(logo)
-       logo_ax.axis('off')
-   else:
-       print(f"  WARNING: Logo not found at {logo_path}")
-       logo_ax.axis('off')
+   logo = plt.imread( current_dir + '/assets/BMKG.png')
+   logo_ax.imshow(logo)
+   logo_ax.axis('off')
    
    # Add text information
    main_text = (
@@ -567,9 +394,6 @@ def create_accumulated_rain_plot_with_provinces_and_sea(ds, shp_provinces, shp_s
                verticalalignment='center',
                horizontalalignment='center',
                linespacing=1.3)
-   
-   print(f"  ✓ Plot completed for H+{forecast_day}")
-   print(f"{'='*60}\n")
    
    return fig, classification, sorting_info
 
@@ -640,7 +464,7 @@ def create_summary_report(forecasts, output_dir=None):
                )
                f.write("Laut: " + ", ".join(seas) + "\n")
    
-   print(f"✓ Laporan ringkasan disimpan di: {summary_filename}")
+   print(f"Laporan ringkasan disimpan di: {summary_filename}")
    return summary_filename
 
 def create_forecast_gif(output_dir=None):
@@ -656,10 +480,6 @@ def create_forecast_gif(output_dir=None):
        if f.startswith('CB_PRED_') and f.endswith('.jpg')
    ])
    
-   if len(plot_files) == 0:
-       print(f"WARNING: No plot files found for GIF creation")
-       return None
-   
    # Baca gambar-gambar tersebut
    images = []
    for filename in plot_files:
@@ -671,7 +491,7 @@ def create_forecast_gif(output_dir=None):
    gif_filename = os.path.join(output_dir, f"CB_FORECAST_ANIMATION_{datetime.now().strftime('%d%m%Y')}.gif")
    imageio.mimsave(gif_filename, images, fps=(1/3), loop=0)  # 3 detik per frame, loop infinitely
    
-   print(f"✓ Animasi forecast disimpan di: {gif_filename}")
+   print(f"Animasi forecast disimpan di: {gif_filename}")
    return gif_filename
 
 def generate_output_json(forecasts, output_dir=None):
@@ -743,6 +563,7 @@ def generate_output_json(forecasts, output_dir=None):
        # Tentukan nama file gambar sesuai yang dihasilkan save_results
        stamp = valid_dt.strftime('%d%m%Y')
        image_filename = f"CB_PRED_{stamp}_H{forecast['day']}.jpg"
+    #    image_path = os.path.join(output_dir, image_filename)
        #date format DDMMYYYY today
        image_path = f"https://web-aviation.bmkg.go.id/prakcb/{first_dt.strftime('%d%m%Y')}/{image_filename}"
        per_hari[key] = {
@@ -755,6 +576,7 @@ def generate_output_json(forecasts, output_dir=None):
 
    # GIF cover
    gif_filename = f"CB_FORECAST_ANIMATION_{datetime.now().strftime('%d%m%Y')}.gif"
+#    gif_path = os.path.join(output_dir, gif_filename)
    gif_path = f"https://web-aviation.bmkg.go.id/prakcb/{first_dt.strftime('%d%m%Y')}/{gif_filename}"
    content_obj = per_hari.copy()
    content_obj["cover"] = {
@@ -783,7 +605,6 @@ def generate_output_json(forecasts, output_dir=None):
    with open(outfile, 'w', encoding='utf-8') as f:
        json.dump(payload, f, ensure_ascii=False, indent=1)
 
-   print(f"✓ File JSON disimpan di: {outfile}")
    return outfile
 
 def ping_callback():
@@ -794,11 +615,11 @@ def ping_callback():
    try:
        response = requests.get(callback_url, timeout=10)
        if response.status_code == 200:
-           print(f"✓ Callback ping berhasil: {response.status_code}")
+           print(f"Callback ping berhasil: {response.status_code}")
        else:
-           print(f"⚠ Callback ping gagal: {response.status_code}")
+           print(f"Callback ping gagal: {response.status_code}")
    except requests.exceptions.RequestException as e:
-       print(f"✗ Error mengirim callback ping: {str(e)}")
+       print(f"Error mengirim callback ping: {str(e)}")
 
 def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces, shp_sea):
    """
@@ -808,20 +629,9 @@ def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces
    forecasts = []
    output_dir = create_date_directory()
    
-   print(f"\n{'='*60}")
-   print(f"GFS DATA DOWNLOAD")
-   print(f"{'='*60}")
-   print(f"URL: {url}")
-   
    try:
        ds = xr.open_dataset(url)
-       print(f"✓ Dataset opened successfully")
-       
        ds = ds.sel(lon=slice(90, 145), lat=slice(-15, 10))
-       print(f"✓ Dataset subset to Indonesia domain")
-       print(f"  Longitude: {ds.lon.values.min():.2f} to {ds.lon.values.max():.2f}")
-       print(f"  Latitude: {ds.lat.values.min():.2f} to {ds.lat.values.max():.2f}")
-       print(f"  Time steps available: {len(ds.time)}")
        
        # Hitung start_time valid berbasis init date/hour dan timesteps (bukan dari ds.time)
        init_datetime_utc = datetime.strptime(f"{date}{hour}", "%Y%m%d%H")
@@ -832,22 +642,19 @@ def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces
            start_time = init_datetime_utc + timedelta(hours=start_step * 3)
            start_times.append(start_time)
        
-       print(f"\nFORECAST SCHEDULE:")
-       print(f"  Init time: {init_datetime_utc.strftime('%Y-%m-%d %H:%M')} UTC")
-       print(f"  Forecast days: {forecast_days}")
+       print(f"\nMembuat forecast dari data GFS tanggal {date} jam {hour}Z")
+       print(f"Periode prediksi: {forecast_days} hari")
        for day, start_time in enumerate(start_times, 1):
-           print(f"  H+{day} valid: {start_time.strftime('%d-%m-%Y %H:%M')} UTC")
-       print(f"{'='*60}\n")
+           print(f"H+{day} valid: {start_time.strftime('%d-%m-%Y')} UTC")
+       
+       print(f"\nMengunduh data GFS untuk tanggal {date} jam {hour}Z...")
        
    except Exception as e:
-       print(f"✗ Error mengunduh data: {str(e)}")
+       print(f"Error mengunduh data: {str(e)}")
        return None
    
    for day in range(1, forecast_days + 1):
-       print(f"\n{'#'*60}")
-       print(f"# FORECAST H+{day} - Valid: {start_times[day-1].strftime('%d-%m-%Y')}")
-       print(f"{'#'*60}")
-       
+       print(f"\nMembuat prediksi untuk H+{day} valid {start_times[day-1].strftime('%d-%m-%Y')}...")
        try:
            fig, classification, sorting_info = create_accumulated_rain_plot_with_provinces_and_sea(
                ds, shp_provinces, shp_sea, 
@@ -868,17 +675,10 @@ def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces
            })
            
            plt.close(fig)  # Tutup figure untuk menghemat memori
-           print(f"✓ Forecast H+{day} completed successfully\n")
            
        except Exception as e:
-           print(f"✗ Error membuat prediksi H+{day}: {str(e)}")
-           import traceback
-           traceback.print_exc()
+           print(f"Error membuat prediksi H+{day}: {str(e)}")
            continue
-   
-   print(f"\n{'='*60}")
-   print(f"POST-PROCESSING")
-   print(f"{'='*60}")
    
    # Tambahkan laporan ringkasan
    create_summary_report(forecasts, output_dir)
@@ -887,62 +687,28 @@ def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces
    create_forecast_gif(output_dir)
    
    # Buat file JSON hasil yang mengikuti struktur assets/dummy.json
-   try:
-       json_path = generate_output_json(forecasts, output_dir)
-   except Exception as e:
-       print(f"✗ Error generating JSON: {str(e)}")
+   json_path = generate_output_json(forecasts, output_dir)
+   print(f"File JSON disimpan di: {json_path}")
    
    # Kirim callback ping setelah semua task selesai
    ping_callback()
    
-   print(f"{'='*60}")
-   print(f"ALL TASKS COMPLETED")
-   print(f"{'='*60}\n")
-   
    return forecasts
 
 if __name__ == "__main__":
-   print(f"\n{'*'*60}")
-   print(f"* CB FORECAST AUTOMATION SCRIPT")
-   print(f"* Script 2 - Production Version with Debugging")
-   print(f"{'*'*60}\n")
-   
    shp_provinces = current_dir + "/datadasar/Provinsi.shp"
    shp_sea = current_dir + "/datadasar/Laut.shp"
-   
-   print(f"CONFIGURATION:")
-   print(f"  Working directory: {current_dir}")
-   print(f"  Provinces shapefile: {shp_provinces}")
-   print(f"  Sea areas shapefile: {shp_sea}")
-   
-   # Validasi file shapefile
-   if not os.path.exists(shp_provinces):
-       print(f"  ✗ ERROR: Provinces shapefile not found!")
-   else:
-       print(f"  ✓ Provinces shapefile found")
-   
-   if not os.path.exists(shp_sea):
-       print(f"  ✗ ERROR: Sea areas shapefile not found!")
-   else:
-       print(f"  ✓ Sea areas shapefile found")
    
    # Dapatkan waktu inisial dan timesteps
    selected_date, selected_hour, timesteps = get_initial_time()
    selected_days = 7
    
-   print(f"\nGFS DATA SELECTION:")
-   print(f"  Date: {selected_date}")
-   print(f"  Hour: {selected_hour}Z")
-   print(f"  Forecast period: {selected_days} days")
-   print(f"{'*'*60}\n")
+   print(f"\nMenggunakan data GFS tanggal {selected_date} jam {selected_hour}Z di folder {current_dir} dan shp di folder {current_dir}/datadasar ")
+   print(f"Periode prediksi: {selected_days} hari")
    
    forecasts = create_flexible_forecast(selected_date, selected_hour, selected_days,
                                      timesteps, shp_provinces, shp_sea)
    
    if not forecasts:
-       print("\n✗ Gagal membuat forecast. Silakan coba lagi nanti.")
-   else:
-       print(f"\n{'*'*60}")
-       print(f"✓ SUCCESS: {len(forecasts)} forecast(s) created successfully")
-       print(f"{'*'*60}\n")
+       print("Gagal membuat forecast. Silakan coba lagi nanti.")
 
