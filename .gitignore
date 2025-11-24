@@ -1,2 +1,12 @@
 CB/*
 CB/
+
+# Shapefile files (too large for GitHub)
+datadasar/*.shp
+datadasar/*.shx
+datadasar/*.dbf
+datadasar/*.prj
+datadasar/*.sbn
+datadasar/*.sbx
+datadasar/*.cpg
+datadasar/*.shp.xml
