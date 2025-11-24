@@ -7,6 +7,11 @@
 import matplotlib
 matplotlib.use('Agg')
 
+import warnings
+# Filter warning dari PyDAP dan xarray yang tidak kritis
+warnings.filterwarnings('ignore', message='.*PyDAP was unable to determine the DAP protocol.*', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*Ambiguous reference date string.*', category=UserWarning)
+
 import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
@@ -116,6 +121,8 @@ def get_initial_time():
    return init_date.strftime('%Y%m%d'), init_hour, timesteps
 
 def get_gfs_url(date, hour):
+   # Tetap gunakan http:// karena lebih cepat dan stabil
+   # Warning PyDAP sudah difilter di bagian import
    base_url = "http://nomads.ncep.noaa.gov:80/dods/gfs_0p25"
    return f"{base_url}/gfs{date}/gfs_0p25_{hour}z"
 
@@ -190,7 +197,9 @@ def calculate_rain_by_region(ds, provinces, sea_areas, precip):
        
        if getattr(province.geometry, "is_empty", False):
            provinces_skipped += 1
-           print(f"  SKIPPED (Empty geometry): {province.get('PROVINSI', 'Unknown')} (Row {idx})")
+           # Gunakan WADMPR jika ada, jika tidak gunakan KDPPUM atau index
+           prov_name_display = province.get('WADMPR', province.get('KDPPUM', f'Row_{idx}'))
+           print(f"  SKIPPED (Empty geometry): {prov_name_display} (Row {idx})")
            continue
        
        provinces_processed += 1
@@ -204,18 +213,21 @@ def calculate_rain_by_region(ds, provinces, sea_areas, precip):
                rain_values = valid_points.rain[~np.isnan(valid_points.rain) & (valid_points.rain >= 0)]
                if len(rain_values) > 0:
                    max_rain = rain_values.max()
-                   prov_name = province['PROVINSI']
+                   # Gunakan WADMPR untuk nama provinsi, fallback ke KDPPUM jika tidak ada
+                   prov_name = province.get('WADMPR', province.get('KDPPUM', f'Province_{idx}'))
                    results['Provinsi'][prov_name] = max_rain
                    
-                   # Simpan kode provinsi untuk pengurutan
-                   sorting_info['Provinsi'][prov_name] = province['KODE_PROV']
+                   # Simpan kode provinsi untuk pengurutan (gunakan KDPPUM)
+                   sorting_info['Provinsi'][prov_name] = province.get('KDPPUM', idx)
                    provinces_with_rain += 1
                    
                    # Print detail untuk provinsi dengan hujan signifikan
                    if max_rain >= 10:
                        print(f"  ✓ {prov_name}: {max_rain:.2f} mm (dari {len(rain_values)} grid points)")
        except Exception as e:
-           print(f"  ERROR processing {province.get('PROVINSI', 'Unknown')}: {str(e)}")
+           # Gunakan WADMPR jika ada, jika tidak gunakan KDPPUM atau index
+           prov_name_display = province.get('WADMPR', province.get('KDPPUM', f'Row_{idx}'))
+           print(f"  ERROR processing {prov_name_display}: {str(e)}")
            continue
    
    print(f"\n{'='*60}")
@@ -814,8 +826,30 @@ def create_flexible_forecast(date, hour, forecast_days, timesteps, shp_provinces
    print(f"URL: {url}")
    
    try:
-       ds = xr.open_dataset(url)
-       print(f"✓ Dataset opened successfully")
+       # Try pydap engine first for OPeNDAP URLs
+       try:
+           ds = xr.open_dataset(url, engine='pydap', chunks={'time': 1})
+           print(f"✓ Dataset opened successfully with pydap engine")
+       except Exception as pydap_error:
+           # Fallback to netcdf4 engine if pydap fails
+           print(f"⚠ pydap engine failed, trying netcdf4 engine...")
+           print(f"  pydap error: {str(pydap_error)}")
+           try:
+               ds = xr.open_dataset(url, engine='netcdf4', chunks={'time': 1})
+               print(f"✓ Dataset opened successfully with netcdf4 engine")
+           except Exception as netcdf4_error:
+               # If both fail, try without specifying engine (auto-detect)
+               print(f"⚠ netcdf4 engine failed, trying auto-detect...")
+               print(f"  netcdf4 error: {str(netcdf4_error)}")
+               try:
+                   ds = xr.open_dataset(url, chunks={'time': 1})
+                   print(f"✓ Dataset opened successfully with auto-detect")
+               except Exception as auto_error:
+                   # Last resort: try without chunks
+                   print(f"⚠ auto-detect with chunks failed, trying without chunks...")
+                   print(f"  auto error: {str(auto_error)}")
+                   ds = xr.open_dataset(url)
+                   print(f"✓ Dataset opened successfully without chunks")
        
        ds = ds.sel(lon=slice(90, 145), lat=slice(-15, 10))
        print(f"✓ Dataset subset to Indonesia domain")

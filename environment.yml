@@ -1,16 +1,22 @@
 name: geo_env
 channels:
   - conda-forge
+  - defaults
 dependencies:
-  - python=3.14
-  - xarray
-  - matplotlib
-  - cartopy
+  - python=3.12
+  - imageio
   - numpy
   - pandas
+  - matplotlib
   - geopandas
+  - xarray
   - tqdm
-  - imageio
-  - netcdf4  # <-- Dependensi xarray
-  - pydap    # <-- Dependensi xarray
-  - ffmpeg   # <-- Dependensi imageio untuk membuat GIF/video
+  - cartopy
+  - netcdf4
+  - pydap
+  - gdal
+  - libgdal
+  - fiona
+  - ffmpeg
+  - dask
+  - bottleneck
