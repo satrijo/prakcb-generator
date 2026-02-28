@@ -833,6 +833,20 @@ def generate_output_json(forecasts, output_dir):
     print(f"  ✓ JSON: {outfile}")
     return outfile
 
+def ping_callback():
+    """
+    Mengirim ping ke callback URL setelah semua task selesai
+    """
+    callback_url = "https://web-aviation.bmkg.go.id/web/predcb/callback"
+    try:
+        response = requests.get(callback_url, timeout=10)
+        if response.status_code == 200:
+            print(f"✓ Callback ping berhasil: {response.status_code}")
+        else:
+            print(f"⚠ Callback ping gagal: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Error mengirim callback ping: {str(e)}")
+
 
 # =============================================================================
 # 6. VISUALISASI
@@ -891,8 +905,14 @@ def create_plot(precip, lats_1d, lons_1d, classification,
     
     if len(provinces) > 0:
         provinces.plot(ax=main_ax, facecolor='none',
-                       edgecolor='black', linewidth=0.8)
-
+                       edgecolor='black', linewidth=0.8,
+                       transform=ccrs.PlateCarree())
+    
+    if len(sea_areas) > 0:
+        sea_areas.plot(ax=main_ax, facecolor='none',
+                         edgecolor='blue', linewidth=0.8, alpha=0.3,
+                         transform=ccrs.PlateCarree())
+    
     # ── Gridlines ─────────────────────────────────────────────────────
     gl = main_ax.gridlines(
         draw_labels=True, linewidth=0.5, color='gray',
@@ -1209,6 +1229,9 @@ def main():
         print("  ✓ File GRIB2 temporary dibersihkan")
     except Exception as e:
         print(f"  [WARN] Cleanup: {e}")
+
+    # ── Callback ping ─────────────────────────────────────────────────
+    ping_callback()
 
     print(f"\n{'='*62}")
     print(f"  SELESAI — {len(forecasts)}/7 forecast berhasil")
