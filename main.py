@@ -753,6 +753,9 @@ def generate_output_json(forecasts, output_dir):
     last_dt  = forecasts[-1]['valid_time']
     from_iso = first_dt.strftime('%Y-%m-%d')
     to_iso   = last_dt.strftime('%Y-%m-%d')
+    
+    # Folder date (sesuai create_date_directory)
+    today = datetime.now().strftime('%d%m%Y')
 
     from_id = format_tanggal_id(first_dt)
     to_id   = format_tanggal_id(last_dt)
@@ -786,7 +789,7 @@ def generate_output_json(forecasts, output_dir):
         stamp          = valid_dt.strftime('%d%m%Y')
         image_filename = f"CB_PRED_{stamp}_H{forecast['day']}.jpg"
         image_path     = (f"https://web-aviation.bmkg.go.id/prakcb/"
-                          f"{first_dt.strftime('%d%m%Y')}/{image_filename}")
+                          f"{today}/{image_filename}")
 
         per_hari[key] = {
             "title": (f"POTENSI PERTUMBUHAN AWAN CB DI WILAYAH UDARA "
@@ -800,7 +803,7 @@ def generate_output_json(forecasts, output_dir):
 
     gif_filename = f"CB_FORECAST_ANIMATION_{datetime.now().strftime('%d%m%Y')}.gif"
     gif_path     = (f"https://web-aviation.bmkg.go.id/prakcb/"
-                    f"{first_dt.strftime('%d%m%Y')}/{gif_filename}")
+                    f"{today}/{gif_filename}")
 
     content_obj          = per_hari.copy()
     content_obj["cover"] = {
