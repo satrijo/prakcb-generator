@@ -548,20 +548,20 @@ def calculate_rain_by_region(precip, lats_1d, lons_1d, provinces, sea_areas):
     try:
         joined_prov = gpd.sjoin(
             points_gdf,
-            provinces[['PROVINSI', 'KODE_PROV', 'geometry']],
+            provinces[['WADMPR', 'KDPPUM', 'geometry']],
             how='inner',
             predicate='within'
         )
         # Groupby → max rain per provinsi
         max_prov = (
             joined_prov[joined_prov['rain'] >= 0]
-            .groupby('PROVINSI')['rain']
+            .groupby('WADMPR')['rain']
             .max()
         )
         for prov_name, rain_val in max_prov.items():
             results['Provinsi'][prov_name] = rain_val
         # Ambil kode provinsi untuk sorting
-        kode_map = provinces.set_index('PROVINSI')['KODE_PROV'].to_dict()
+        kode_map = provinces.set_index('WADMPR')['KDPPUM'].to_dict()
         sorting_info['Provinsi'] = kode_map
 
     except Exception as e:
@@ -574,12 +574,11 @@ def calculate_rain_by_region(precip, lats_1d, lons_1d, provinces, sea_areas):
                 pts  = points_gdf.loc[mask, 'rain']
                 pts  = pts[(~np.isnan(pts)) & (pts >= 0)]
                 if len(pts) > 0:
-                    name = prov['PROVINSI']
+                    name = prov['WADMPR']
                     results['Provinsi'][name]      = pts.max()
-                    sorting_info['Provinsi'][name] = prov['KODE_PROV']
+                    sorting_info['Provinsi'][name] = prov['KDPPUM']
             except Exception as ex:
-                print(f"  [WARN] {prov.get('PROVINSI','?')}: {ex}")
-
+                print(f"  [WARN] {prov.get('WADMPR','?')}: {ex}")
     # ── Laut ──────────────────────────────────────────────────────────
     print("  Menghitung area Laut (sjoin)...")
     try:
