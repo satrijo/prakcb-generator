@@ -1,5 +1,5 @@
 # 1. Gunakan base image resmi Miniconda
-FROM continuumio/miniconda3
+FROM condaforge/miniforge3
 
 # 2. Set direktori kerja di dalam container
 WORKDIR /app
