@@ -1,22 +1,17 @@
-# 1. Gunakan base image resmi Miniconda
-FROM condaforge/miniforge3
+# Gunakan micromamba supaya proses dependency solving/install lebih cepat
+FROM mambaorg/micromamba:latest
 
-# 2. Set direktori kerja di dalam container
 WORKDIR /app
 
-# 3. Salin HANYA file environment.yml terlebih dahulu
-# Ini memanfaatkan cache Docker. Environment tidak akan di-build ulang
-# jika Anda hanya mengubah kode .py Anda.
-COPY environment.yml .
+# Salin environment lebih dulu agar layer dependency bisa di-cache
+COPY --chown=$MAMBA_USER:$MAMBA_USER environment.yml /tmp/environment.yml
 
-# 4. Buat environment Conda dari file .yml
-# Ini adalah langkah yang paling lama
-RUN conda env create -f environment.yml
+# Buat environment Conda/Mamba dari file .yml
+RUN micromamba create -y -f /tmp/environment.yml && \
+    micromamba clean --all --yes
 
-# 5. Salin semua file project Anda (cb.py, shapefiles, dll.) ke /app
-COPY . .
+# Salin semua file project ke /app
+COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 
-# 6. Perintah default untuk menjalankan skrip Anda
-# Ini menggunakan "conda run" untuk memastikan skrip berjalan
-# DI DALAM environment 'geo_env' yang sudah kita buat
-CMD ["conda", "run", "-n", "geo_env", "python", "main.py"]
+# Jalankan skrip di dalam environment geo_env
+CMD ["micromamba", "run", "-n", "geo_env", "python", "main.py"]
