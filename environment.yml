@@ -11,11 +11,9 @@ dependencies:
   - xarray
   - tqdm
   - cartopy
-  - shapely<2.0
+  - shapely
   - netcdf4
   - pydap
-  - cfgrib
-  - eccodes
   - gdal
   - fiona
   - pyogrio

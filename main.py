@@ -17,6 +17,7 @@ from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import xarray as xr
 import requests
 import struct
 import os

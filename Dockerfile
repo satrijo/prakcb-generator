@@ -13,6 +13,11 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER environment.yml /tmp/environment.yml
 RUN micromamba create -y -f /tmp/environment.yml && \
     micromamba clean --all --yes
 
+# Tambahkan decoder GRIB resmi di layer terpisah supaya perubahan ini tidak
+# memaksa solve ulang seluruh environment utama saat cache masih tersedia.
+RUN micromamba install -y -n geo_env -c conda-forge cfgrib eccodes && \
+    micromamba clean --all --yes
+
 # Salin semua file project ke /app
 COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 
