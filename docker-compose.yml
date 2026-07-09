@@ -5,6 +5,10 @@ services:
     
     # Perintahkan Compose untuk build dari Dockerfile di direktori ini
     build: .
+
+    # Pakai network host agar cron/container memakai koneksi server langsung.
+    # Ini membantu jika Docker bridge tidak punya route internet ke NOMADS.
+    network_mode: host
     
     # Volume mapping (SANGAT PENTING)
     volumes:
