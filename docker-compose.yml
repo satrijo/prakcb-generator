@@ -10,6 +10,11 @@ services:
     # Ini membantu jika Docker bridge tidak punya route internet ke NOMADS.
     network_mode: host
 
+    # Micromamba default jalan sebagai mambauser, sedangkan bind mount output
+    # di server biasanya owned root/www-data. Jalankan sebagai root agar cron
+    # bisa menulis ke /app/CB seperti image Conda lama.
+    user: "0:0"
+
     # Server tidak bisa akses NOMADS, tapi bisa akses AWS S3 mirror GFS.
     environment:
       GFS_SOURCE: aws
