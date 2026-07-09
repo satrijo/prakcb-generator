@@ -3,6 +3,9 @@ FROM mambaorg/micromamba:latest
 
 WORKDIR /app
 
+# Pastikan output print Python langsung masuk ke log saat stdout di-redirect
+ENV PYTHONUNBUFFERED=1
+
 # Salin environment lebih dulu agar layer dependency bisa di-cache
 COPY --chown=$MAMBA_USER:$MAMBA_USER environment.yml /tmp/environment.yml
 
@@ -14,4 +17,4 @@ RUN micromamba create -y -f /tmp/environment.yml && \
 COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 
 # Jalankan skrip di dalam environment geo_env
-CMD ["micromamba", "run", "-n", "geo_env", "python", "main.py"]
+CMD ["micromamba", "run", "-n", "geo_env", "python", "-u", "main.py"]
