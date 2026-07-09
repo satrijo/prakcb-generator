@@ -13,6 +13,7 @@ import matplotlib.image as mpimg
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -1050,16 +1051,15 @@ def create_plot(precip, lats_1d, lons_1d, classification,
                          transform=ccrs.PlateCarree())
     
     # ── Gridlines ─────────────────────────────────────────────────────
-    gl = main_ax.gridlines(
-        draw_labels=True, linewidth=0.5, color='gray',
-        alpha=0.5, linestyle='--',
-        xlocs=np.arange(90, 146, 4),
-        ylocs=np.arange(-15, 11, 2)
-    )
-    gl.top_labels   = False
-    gl.right_labels = False
-    gl.xlabel_style = {'size': 8}
-    gl.ylabel_style = {'size': 8}
+    # Hindari cartopy Gridliner karena pada kombinasi Cartopy + Shapely 2.x
+    # kadang gagal saat savefig: LinearRing tidak closed. Pakai ticks/grid
+    # Matplotlib biasa agar render stabil di Docker/cron.
+    main_ax.set_xticks(np.arange(90, 146, 4), crs=ccrs.PlateCarree())
+    main_ax.set_yticks(np.arange(-15, 11, 2), crs=ccrs.PlateCarree())
+    main_ax.xaxis.set_major_formatter(LongitudeFormatter())
+    main_ax.yaxis.set_major_formatter(LatitudeFormatter())
+    main_ax.tick_params(labelsize=8)
+    main_ax.grid(True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
 
     # ── Legend CB ─────────────────────────────────────────────────────
     legend_elements = [

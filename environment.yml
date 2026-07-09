@@ -11,7 +11,7 @@ dependencies:
   - xarray
   - tqdm
   - cartopy
-  - shapely
+  - shapely<2.0
   - netcdf4
   - pydap
   - gdal
