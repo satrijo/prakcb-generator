@@ -583,12 +583,63 @@ def _decode_data(raw, s5, s7, n_vals, template_num):
         return None
 
 
+def read_grib2_cprat_cfgrib(filepath):
+    """
+    Baca GRIB2 memakai cfgrib/eccodes.
+    Ini diperlukan untuk data AWS yang memakai Complex Packing + Spatial Differencing.
+    Return: (data_2d_mm_3jam, lats_1d, lons_1d) atau (None, None, None).
+    """
+    ds = None
+    try:
+        ds = xr.open_dataset(
+            filepath,
+            engine="cfgrib",
+            backend_kwargs={"indexpath": ""}
+        )
+        var_name = "cprat" if "cprat" in ds.data_vars else list(ds.data_vars)[0]
+
+        # Ubah longitude 0..360 ke -180..180, lalu crop domain Indonesia.
+        if "longitude" in ds.coords:
+            ds = ds.assign_coords(
+                longitude=(((ds.longitude + 180) % 360) - 180)
+            ).sortby("longitude")
+
+        if "latitude" in ds.coords:
+            ds = ds.sortby("latitude")
+
+        da = ds[var_name].squeeze(drop=True)
+        da = da.sel(
+            longitude=slice(DOMAIN["lon_min"], DOMAIN["lon_max"]),
+            latitude=slice(DOMAIN["lat_min"], DOMAIN["lat_max"])
+        )
+
+        data_mm = da.values.astype(float) * 3600.0 * 3.0
+        data_mm = np.where(np.isfinite(data_mm) & (data_mm > 0), data_mm, 0.0)
+        print(f"    [OK] cfgrib: {os.path.basename(filepath)} "
+              f"shape={data_mm.shape} min={data_mm.min():.2f} max={data_mm.max():.2f}")
+        return data_mm, da.latitude.values, da.longitude.values
+
+    except Exception as e:
+        print(f"    [WARN] cfgrib gagal baca {os.path.basename(filepath)}: {e}")
+        return None, None, None
+    finally:
+        if ds is not None:
+            try:
+                ds.close()
+            except Exception:
+                pass
+
+
 def read_grib2_cprat(filepath):
     """
     Baca satu file GRIB2 → data CPRAT mm/3jam.
-    MODIFIKASI: deteksi dan handle berbagai template packing.
+    Prioritas pakai cfgrib/eccodes; fallback ke parser lama jika cfgrib gagal.
     Return: (data_2d, lats_1d, lons_1d) atau (None, None, None)
     """
+    data, lats, lons = read_grib2_cprat_cfgrib(filepath)
+    if data is not None:
+        return data, lats, lons
+
     try:
         with open(filepath, 'rb') as f:
             raw = f.read()
