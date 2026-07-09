@@ -9,6 +9,10 @@ services:
     # Pakai network host agar cron/container memakai koneksi server langsung.
     # Ini membantu jika Docker bridge tidak punya route internet ke NOMADS.
     network_mode: host
+
+    # Server tidak bisa akses NOMADS, tapi bisa akses AWS S3 mirror GFS.
+    environment:
+      GFS_SOURCE: aws
     
     # Volume mapping (SANGAT PENTING)
     volumes:

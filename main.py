@@ -46,6 +46,8 @@ CB_COLORS = ['#FFFFFF', '#87CEFA', '#000080', '#00FF00']
 
 FILTER_URL    = "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl"
 NOMADS_CHECK  = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/"
+AWS_GFS_BASE  = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
+GFS_SOURCE    = os.getenv("GFS_SOURCE", "auto").lower()  # auto | nomads | aws
 REQUEST_HEADERS = {
     "User-Agent": "Mozilla/5.0 (prakcb-generator; Python requests)"
 }
@@ -134,8 +136,58 @@ def get_initial_time():
 
 
 # =============================================================================
-# 1B. VALIDASI KETERSEDIAAN GFS RUN DI NOMADS
+# 1B. VALIDASI KETERSEDIAAN GFS RUN DI NOMADS / AWS S3
 # =============================================================================
+
+def gfs_filename(hour, fhour_int):
+    return f"gfs.t{hour}z.pgrb2.0p25.f{fhour_int:03d}"
+
+
+def aws_gfs_urls(date, hour, fhour_int):
+    filename = gfs_filename(hour, fhour_int)
+    grib_url = f"{AWS_GFS_BASE}/gfs.{date}/{hour}/atmos/{filename}"
+    return grib_url, f"{grib_url}.idx"
+
+
+def find_idx_range(idx_text, var="CPRAT", level="surface"):
+    """
+    Cari byte range message GRIB di file .idx AWS.
+    Format umum idx: nomor:byte:date:VAR:LEVEL:forecast...
+    Return: (start, end, deskripsi) atau None.
+    """
+    rows = []
+    for line in idx_text.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split(":")
+        if len(parts) >= 5:
+            rows.append((line, parts))
+
+    for i, (line, parts) in enumerate(rows):
+        if parts[3] == var and parts[4] == level:
+            if i + 1 >= len(rows):
+                return None
+            start = int(parts[1])
+            end = int(rows[i + 1][1][1]) - 1
+            return start, end, line
+    return None
+
+
+def check_gfs_availability_aws(date, hour, timeout=20):
+    """Validasi AWS S3 dengan mengecek file idx acuan f024."""
+    _, idx_url = aws_gfs_urls(date, hour, 24)
+    print(f"\n  [CHECK] Validasi ketersediaan GFS AWS {date} {hour}Z ...")
+    print(f"          IDX: {idx_url}")
+    try:
+        r = requests.get(idx_url, timeout=timeout, headers=REQUEST_HEADERS)
+        if r.status_code == 200 and find_idx_range(r.text, "CPRAT", "surface"):
+            print(f"  [OK]    AWS GFS {date} {hour}Z tersedia (idx CPRAT surface valid)")
+            return True
+        print(f"  [WARN]  AWS idx tidak valid (HTTP {r.status_code})")
+    except requests.exceptions.RequestException as e:
+        print(f"  [WARN]  Gagal cek AWS idx: {repr(e)}")
+    return False
+
 
 def check_gfs_availability(date, hour, timeout=20):
     """
@@ -149,6 +201,9 @@ def check_gfs_availability(date, hour, timeout=20):
 
     Return: True jika tersedia, False jika tidak.
     """
+    if GFS_SOURCE == "aws":
+        return check_gfs_availability_aws(date, hour, timeout)
+
     dir_url = f"{NOMADS_CHECK}gfs.{date}/{hour}/atmos/"
     print(f"\n  [CHECK] Validasi ketersediaan GFS {date} {hour}Z ...")
     print(f"          URL: {dir_url}")
@@ -204,6 +259,11 @@ def check_gfs_availability(date, hour, timeout=20):
     except requests.exceptions.RequestException as e:
         print(f"  [WARN]  Gagal cek file acuan: {repr(e)}")
 
+    if GFS_SOURCE == "auto":
+        print("  [FALLBACK] NOMADS gagal, mencoba AWS S3...")
+        if check_gfs_availability_aws(date, hour, timeout):
+            return True
+
     # ── Tingkat 3: warning interaktif ────────────────────────────────
     print(f"\n  [!] GFS {date} {hour}Z BELUM TERSEDIA atau tidak dapat diakses.")
     print(f"      Ini normal jika dijalankan terlalu awal.")
@@ -234,8 +294,45 @@ def check_gfs_availability(date, hour, timeout=20):
 
 
 # =============================================================================
-# 2. DOWNLOAD — NOMADS GRIB FILTER
+# 2. DOWNLOAD — NOMADS GRIB FILTER / AWS S3 RANGE
 # =============================================================================
+
+def download_one_fhour_aws(date, hour, fhour_int, tmp_dir, timeout=120):
+    """
+    Download hanya message CPRAT:surface dari AWS S3.
+    Tidak mengambil file full GRIB 500MB; byte range diambil dari file .idx.
+    """
+    out_path = os.path.join(tmp_dir, f"cprat_f{fhour_int:03d}.grb2")
+    grib_url, idx_url = aws_gfs_urls(date, hour, fhour_int)
+
+    try:
+        idx = requests.get(idx_url, timeout=30, headers=REQUEST_HEADERS)
+        if idx.status_code != 200:
+            print(f"  [WARN] AWS idx f{fhour_int:03d}: HTTP {idx.status_code}")
+            return None
+
+        match = find_idx_range(idx.text, "CPRAT", "surface")
+        if not match:
+            print(f"  [WARN] AWS idx f{fhour_int:03d}: CPRAT surface tidak ditemukan")
+            return None
+
+        start, end, desc = match
+        headers = dict(REQUEST_HEADERS)
+        headers["Range"] = f"bytes={start}-{end}"
+
+        r = requests.get(grib_url, timeout=timeout, headers=headers)
+        if r.status_code in (200, 206) and r.content[:4] == b"GRIB":
+            with open(out_path, "wb") as f:
+                f.write(r.content)
+            print(f"  [OK]   AWS f{fhour_int:03d}  {len(r.content)//1024} KB | {desc}")
+            return out_path
+
+        print(f"  [WARN] AWS f{fhour_int:03d}: HTTP {r.status_code}, head={r.content[:20]}")
+    except requests.exceptions.RequestException as e:
+        print(f"  [WARN] AWS f{fhour_int:03d}: {repr(e)}")
+
+    return None
+
 
 def download_one_fhour(date, hour, fhour_int, tmp_dir, retries=3, wait=5):
     """
@@ -247,6 +344,9 @@ def download_one_fhour(date, hour, fhour_int, tmp_dir, retries=3, wait=5):
     if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
         print(f"  [CACHE] f{fhour_int:03d}")
         return out_path
+
+    if GFS_SOURCE == "aws":
+        return download_one_fhour_aws(date, hour, fhour_int, tmp_dir)
 
     params = {
         'dir':         f"/gfs.{date}/{hour}/atmos",
@@ -283,6 +383,12 @@ def download_one_fhour(date, hour, fhour_int, tmp_dir, retries=3, wait=5):
         if attempt < retries:
             print(f"         Menunggu {wait}s sebelum retry...")
             time.sleep(wait)
+
+    if GFS_SOURCE == "auto":
+        print(f"  [FALLBACK] Mencoba AWS S3 range untuk f{fhour_int:03d}...")
+        path = download_one_fhour_aws(date, hour, fhour_int, tmp_dir)
+        if path:
+            return path
 
     print(f"  [ERROR] Gagal download f{fhour_int:03d}")
     return None
