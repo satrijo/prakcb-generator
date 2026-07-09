@@ -46,6 +46,9 @@ CB_COLORS = ['#FFFFFF', '#87CEFA', '#000080', '#00FF00']
 
 FILTER_URL    = "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl"
 NOMADS_CHECK  = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/"
+REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (prakcb-generator; Python requests)"
+}
 
 # ── Font ──────────────────────────────────────────────────────────────────────
 plt.rcParams['font.family'] = 'Times New Roman'
@@ -152,17 +155,28 @@ def check_gfs_availability(date, hour, timeout=20):
 
     # ── Tingkat 1: cek direktori ──────────────────────────────────────
     try:
-        r = requests.head(dir_url, timeout=timeout, allow_redirects=True)
-        if r.status_code == 200:
-            print(f"  [OK]    GFS {date} {hour}Z tersedia (HTTP 200)")
-            return True
-        elif r.status_code == 403:
-            # NOMADS kadang return 403 tapi data tetap bisa diakses via filter
-            print(f"  [WARN]  HTTP 403 pada direktori — mencoba file acuan...")
-        else:
-            print(f"  [WARN]  HTTP {r.status_code} pada direktori")
+        # Pakai GET ringan, bukan HEAD. Beberapa endpoint NOMADS/CDN lebih
+        # konsisten saat diakses seperti browser biasa.
+        r = requests.get(
+            dir_url,
+            timeout=timeout,
+            allow_redirects=True,
+            headers=REQUEST_HEADERS,
+            stream=True,
+        )
+        try:
+            if r.status_code == 200:
+                print(f"  [OK]    GFS {date} {hour}Z tersedia (HTTP 200)")
+                return True
+            elif r.status_code == 403:
+                # NOMADS kadang return 403 tapi data tetap bisa diakses via filter
+                print(f"  [WARN]  HTTP 403 pada direktori — mencoba file acuan...")
+            else:
+                print(f"  [WARN]  HTTP {r.status_code} pada direktori")
+        finally:
+            r.close()
     except requests.exceptions.RequestException as e:
-        print(f"  [WARN]  Gagal cek direktori: {str(e)[:60]}")
+        print(f"  [WARN]  Gagal cek direktori: {repr(e)}")
 
     # ── Tingkat 2: HEAD request file acuan f024 ───────────────────────
     params_check = {
@@ -175,7 +189,12 @@ def check_gfs_availability(date, hour, timeout=20):
         'toplat': 5,    'bottomlat': -5,
     }
     try:
-        r2 = requests.get(FILTER_URL, params=params_check, timeout=timeout)
+        r2 = requests.get(
+            FILTER_URL,
+            params=params_check,
+            timeout=timeout,
+            headers=REQUEST_HEADERS,
+        )
         if r2.status_code == 200 and r2.content[:4] == b'GRIB':
             print(f"  [OK]    GFS {date} {hour}Z tersedia (file acuan valid)")
             return True
@@ -183,7 +202,7 @@ def check_gfs_availability(date, hour, timeout=20):
             print(f"  [WARN]  File acuan tidak valid "
                   f"(HTTP {r2.status_code}, content: {r2.content[:20]})")
     except requests.exceptions.RequestException as e:
-        print(f"  [WARN]  Gagal cek file acuan: {str(e)[:60]}")
+        print(f"  [WARN]  Gagal cek file acuan: {repr(e)}")
 
     # ── Tingkat 3: warning interaktif ────────────────────────────────
     print(f"\n  [!] GFS {date} {hour}Z BELUM TERSEDIA atau tidak dapat diakses.")
@@ -197,10 +216,14 @@ def check_gfs_availability(date, hour, timeout=20):
     }
     print(f"      GFS {hour}Z biasanya tersedia {avail.get(hour, 'tidak diketahui')}")
 
-    # Non-interaktif (cron/server): lanjutkan dengan peringatan
+    # Non-interaktif (cron/server): jangan lanjut otomatis jika NOMADS tidak bisa diakses.
+    # Kalau tetap ingin memaksa download walau validasi gagal, set FORCE_GFS_DOWNLOAD=1.
     if not sys.stdin.isatty():
-        print("  [AUTO] Mode non-interaktif: melanjutkan proses...")
-        return True
+        if os.getenv("FORCE_GFS_DOWNLOAD", "0") == "1":
+            print("  [AUTO] FORCE_GFS_DOWNLOAD=1: melanjutkan proses...")
+            return True
+        print("  [ABORT] Mode non-interaktif: GFS tidak tersedia/tidak dapat diakses.")
+        return False
 
     # Interaktif: tanya pengguna
     try:
@@ -239,7 +262,12 @@ def download_one_fhour(date, hour, fhour_int, tmp_dir, retries=3, wait=5):
 
     for attempt in range(1, retries + 1):
         try:
-            r = requests.get(FILTER_URL, params=params, timeout=120)
+            r = requests.get(
+                FILTER_URL,
+                params=params,
+                timeout=120,
+                headers=REQUEST_HEADERS,
+            )
             if r.status_code == 200 and r.content[:4] == b'GRIB':
                 with open(out_path, 'wb') as f:
                     f.write(r.content)
